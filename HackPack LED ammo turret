@@ -3,7 +3,7 @@
 #include <IRremote.hpp>
 #include <Adafruit_NeoPixel.h>
 
-// IR Remote Command Definitions
+
 #define left 0x8
 #define right 0x5A
 #define up 0x18
@@ -16,7 +16,7 @@
 
 #define DECODE_NEC
 
-// Servo Setup
+
 Servo yawServo;
 Servo pitchServo;
 Servo rollServo;
@@ -30,9 +30,9 @@ int pitchMoveSpeed = 8;
 int pitchMax = 150;
 int pitchMin = 33;
 int yawPrecision = 150;
-int rollPrecision = 1000; // 1 second of roll movement
+int rollPrecision = 1000; 
 
-// LED Setup
+
 #define LED_PIN 6
 #define NUM_LEDS 8
 Adafruit_NeoPixel ledBar(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
@@ -107,10 +107,10 @@ void fire() {
   delay(5);
   Serial.println("FIRING");
 
-  // Accumulate roll time and update LED every 2.5 seconds
+  
   rollTimeAccumulated += rollPrecision;
   if (rollTimeAccumulated >= 2500 && currentRedIndex < NUM_LEDS) { //2500 = 2.5 seconds
-    ledBar.setPixelColor(currentRedIndex, ledBar.Color(255, 0, 0)); // Red
+    ledBar.setPixelColor(currentRedIndex, ledBar.Color(255, 0, 0)); 
     ledBar.show();
     currentRedIndex++;
     rollTimeAccumulated = 0;
