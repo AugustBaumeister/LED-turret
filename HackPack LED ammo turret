@@ -1,0 +1,225 @@
+#include <Arduino.h>
+#include <Servo.h>
+#include <IRremote.hpp>
+#include <Adafruit_NeoPixel.h>
+
+// IR Remote Command Definitions
+#define left 0x8
+#define right 0x5A
+#define up 0x18
+#define down 0x52
+#define ok 0x1C
+#define cmd1 0x45
+#define cmd2 0x46
+#define cmd3 0x47
+#define star 0x16
+
+#define DECODE_NEC
+
+// Servo Setup
+Servo yawServo;
+Servo pitchServo;
+Servo rollServo;
+
+int yawStopSpeed = 90;
+int yawMoveSpeed = 90;
+int rollStopSpeed = 90;
+int rollMoveSpeed = 90;
+int pitchServoVal = 100;
+int pitchMoveSpeed = 8;
+int pitchMax = 150;
+int pitchMin = 33;
+int yawPrecision = 150;
+int rollPrecision = 1000; // 1 second of roll movement
+
+// LED Setup
+#define LED_PIN 6
+#define NUM_LEDS 8
+Adafruit_NeoPixel ledBar(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+int currentRedIndex = 0;
+unsigned long rollTimeAccumulated = 0;
+unsigned long lastRollUpdate = 0;
+
+void shakeHeadYes(int moves = 3);
+void shakeHeadNo(int moves = 3);
+
+void setup() {
+  Serial.begin(9600);
+
+  yawServo.attach(10);
+  pitchServo.attach(11);
+  rollServo.attach(12);
+
+  IrReceiver.begin(9, ENABLE_LED_FEEDBACK);
+  Serial.println(F("Turret system online. Awaiting commands..."));
+
+  ledBar.begin();
+  ledBar.show();
+  for (int i = 0; i < NUM_LEDS; i++) {
+    ledBar.setPixelColor(i, ledBar.Color(0, 255, 0)); // Green
+  }
+  ledBar.show();
+
+  homeServos();
+}
+
+void loop() {
+  if (IrReceiver.decode()) {
+    IrReceiver.resume();
+
+    switch (IrReceiver.decodedIRData.command) {
+      case up:
+        upMove(1);
+        break;
+      case down:
+        downMove(1);
+        break;
+      case left:
+        leftMove(1);
+        break;
+      case right:
+        rightMove(1);
+        break;
+      case ok:
+        fire();
+        break;
+      case star:
+        fireAll();
+        break;
+      case cmd1:
+        shakeHeadYes(3);
+        break;
+      case cmd2:
+        shakeHeadNo(3);
+        break;
+      case cmd3:
+        homeServos();
+        break;
+    }
+  }
+  delay(5);
+}
+
+void fire() {
+  rollServo.write(rollStopSpeed + rollMoveSpeed);
+  delay(rollPrecision);
+  rollServo.write(rollStopSpeed);
+  delay(5);
+  Serial.println("FIRING");
+
+  // Accumulate roll time and update LED every 2.5 seconds
+  rollTimeAccumulated += rollPrecision;
+  if (rollTimeAccumulated >= 2500 && currentRedIndex < NUM_LEDS) { //2500 = 2.5 seconds
+    ledBar.setPixelColor(currentRedIndex, ledBar.Color(255, 0, 0)); // Red
+    ledBar.show();
+    currentRedIndex++;
+    rollTimeAccumulated = 0;
+  }
+}
+
+void fireAll() {
+  rollServo.write(rollStopSpeed + rollMoveSpeed);
+  delay(rollPrecision * 6);
+  rollServo.write(rollStopSpeed);
+  delay(5);
+  Serial.println("FIRING ALL");
+
+  for (int i = currentRedIndex; i < NUM_LEDS; i++) {
+    ledBar.setPixelColor(i, ledBar.Color(255, 0, 0));
+  }
+  ledBar.show();
+  currentRedIndex = NUM_LEDS;
+}
+
+void homeServos() {
+  yawServo.write(yawStopSpeed);
+  delay(20);
+  rollServo.write(rollStopSpeed);
+  delay(100);
+  pitchServo.write(100);
+  delay(100);
+  pitchServoVal = 100;
+  Serial.println("HOMING");
+
+  currentRedIndex = 0;
+  rollTimeAccumulated = 0;
+  for (int i = 0; i < NUM_LEDS; i++) {
+    ledBar.setPixelColor(i, ledBar.Color(0, 255, 0)); // Green
+  }
+  ledBar.show();
+}
+
+void leftMove(int moves) {
+  for (int i = 0; i < moves; i++) {
+    yawServo.write(yawStopSpeed + yawMoveSpeed);
+    delay(yawPrecision);
+    yawServo.write(yawStopSpeed);
+    delay(5);
+    Serial.println("LEFT");
+  }
+}
+
+void rightMove(int moves) {
+  for (int i = 0; i < moves; i++) {
+    yawServo.write(yawStopSpeed - yawMoveSpeed);
+    delay(yawPrecision);
+    yawServo.write(yawStopSpeed);
+    delay(5);
+    Serial.println("RIGHT");
+  }
+}
+
+void upMove(int moves) {
+  for (int i = 0; i < moves; i++) {
+    if ((pitchServoVal + pitchMoveSpeed) < pitchMax) {
+      pitchServoVal += pitchMoveSpeed;
+      pitchServo.write(pitchServoVal);
+      delay(50);
+      Serial.println("UP");
+    }
+  }
+}
+
+void downMove(int moves) {
+  for (int i = 0; i < moves; i++) {
+    if ((pitchServoVal - pitchMoveSpeed) > pitchMin) {
+      pitchServoVal -= pitchMoveSpeed;
+      pitchServo.write(pitchServoVal);
+      delay(50);
+      Serial.println("DOWN");
+    }
+  }
+}
+
+void shakeHeadYes(int moves = 3) {
+  Serial.println("YES");
+  int startAngle = pitchServoVal;
+  int nodAngle = startAngle + 15;
+
+  for (int i = 0; i < moves; i++) {
+    for (int angle = startAngle; angle <= nodAngle; angle++) {
+      pitchServo.write(angle);
+      delay(7);
+    }
+    delay(50);
+    for (int angle = nodAngle; angle >= startAngle; angle--) {
+      pitchServo.write(angle);
+      delay(7);
+    }
+    delay(50);
+  }
+}
+
+void shakeHeadNo(int moves = 3) {
+  Serial.println("NO");
+  for (int i = 0; i < moves; i++) {
+    yawServo.write(140);
+    delay(190);
+    yawServo.write(yawStopSpeed);
+    delay(50);
+    yawServo.write(40);
+    delay(190);
+    yawServo.write(yawStopSpeed);
+    delay(50);
+  }
+}
